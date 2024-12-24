@@ -130,12 +130,12 @@ const StaffOrderList: React.FC<StaffOrderListProps> = ({ orders, onOrderUpdate }
                     <Button
                       variant="contained"
                       color="primary"
-                      onClick={() => handleStatusUpdate(order.id, 'Accepted')}
+                      onClick={() => handleStatusUpdate(order.id, 'Preparing')}
                     >
-                      {order.is_service ? 'Accept Request' : 'Accept Order'}
+                      {order.is_service ? 'Accept Request' : 'Start Preparing'}
                     </Button>
                   )}
-                  {order.status === 'Accepted' && (
+                  {order.status === 'Preparing' && (
                     <Button
                       variant="contained"
                       color="success"

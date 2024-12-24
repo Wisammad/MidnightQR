@@ -29,6 +29,22 @@ def client(application):
         with application.app_context():
             db.drop_all()
 
+@pytest.fixture
+def admin_token(client, application):
+    with application.app_context():
+        # Create admin user
+        admin = User(username='admin', role='admin')
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+        
+        # Login as admin
+        response = client.post('/auth/login', json={
+            'username': 'admin',
+            'password': 'admin123'
+        })
+        return response.json['access_token']
+
 def test_staff_login(client):
     """Test staff login functionality"""
     response = client.post('/auth/login', json={
@@ -49,3 +65,27 @@ def test_invalid_login(client):
     
     assert response.status_code == 401
     assert 'error' in response.json
+
+def test_create_staff(client, admin_token):
+    """Test staff creation by admin"""
+    response = client.post('/auth/create-staff', 
+        json={
+            'username': 'newstaff',
+            'password': 'staffpass'
+        },
+        headers={'Authorization': f'Bearer {admin_token}'}
+    )
+    
+    assert response.status_code == 201
+    assert response.json['message'] == "Staff account created successfully"
+
+def test_create_staff_unauthorized(client):
+    """Test staff creation without admin privileges"""
+    response = client.post('/auth/create-staff', 
+        json={
+            'username': 'newstaff',
+            'password': 'staffpass'
+        }
+    )
+    
+    assert response.status_code == 401  # Unauthorized without token

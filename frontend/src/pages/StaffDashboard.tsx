@@ -33,6 +33,9 @@ const StaffDashboard: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
+  const activeOrders = orders.filter(order => ['Pending', 'Preparing'].includes(order.status));
+  const completedOrders = orders.filter(order => order.status === 'Completed');
+
   return (
     <>
       <NavBar />
@@ -43,18 +46,16 @@ const StaffDashboard: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           Active Orders
         </Typography>
-        
         <StaffOrderList 
-          orders={orders.filter(order => order.status === 'Pending')}
+          orders={activeOrders}
           onOrderUpdate={loadOrders}
         />
 
         <Typography variant="h4" sx={{ mt: 4 }} gutterBottom>
           Completed Orders
         </Typography>
-        
         <StaffOrderList 
-          orders={orders.filter(order => order.status === 'Completed')}
+          orders={completedOrders}
           onOrderUpdate={loadOrders}
         />
       </Container>
