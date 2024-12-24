@@ -3,8 +3,8 @@ from app import app, db
 from models import User
 from flask_jwt_extended import create_access_token
 
-@pytest.fixture
-def client():
+#@pytest.fixture
+'''def client():
     app.config['TESTING'] = True
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     
@@ -20,7 +20,7 @@ def client():
         yield client
         
         with app.app_context():
-            db.drop_all()
+            db.drop_all()'''
 
 def test_staff_login(client):
     """Test staff login functionality"""
