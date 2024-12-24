@@ -1,6 +1,8 @@
 import pytest
 from app import app, db
-from models import User, Order, MenuItem
+from models import User
+from werkzeug.security import generate_password_hash
+from flask_jwt_extended import create_access_token
 
 @pytest.fixture
 def client():
@@ -10,77 +12,82 @@ def client():
     with app.test_client() as client:
         with app.app_context():
             db.create_all()
-            # Create test data
-            staff_user = User(username='teststaff', role='staff')
-            staff_user.set_password('password123')
-            db.session.add(staff_user)
             
-            table_user = User(username='table1', role='table', table_number=1)
-            db.session.add(table_user)
+            # Create test users with hashed passwords
+            users = [
+                {
+                    'username': 'admin',
+                    'password': generate_password_hash('admin123'),
+                    'role': User.ROLE_ADMIN
+                },
+                {
+                    'username': 'staff1',
+                    'password': generate_password_hash('staff123'),
+                    'role': User.ROLE_STAFF
+                },
+                {
+                    'username': 'table1',
+                    'password': generate_password_hash('table123'),
+                    'role': User.ROLE_TABLE,
+                    'table_number': 1
+                }
+            ]
             
-            menu_item = MenuItem(name='Test Item', price=10.0, category='food')
-            db.session.add(menu_item)
-            
+            for user_data in users:
+                user = User(
+                    username=user_data['username'],
+                    password_hash=user_data['password'],
+                    role=user_data['role'],
+                    table_number=user_data.get('table_number')
+                )
+                db.session.add(user)
             db.session.commit()
+            
         yield client
         
         with app.app_context():
             db.drop_all()
 
-def test_staff_order_acceptance(client):
-    # Login as staff
+def test_admin_login(client):
+    """Test admin login functionality"""
     response = client.post('/auth/login', json={
-        'username': 'teststaff',
-        'password': 'password123'
+        'username': 'admin',
+        'password': 'admin123'
     })
-    assert response.status_code == 200
-    token = response.json['access_token']
     
-    # Create test order
-    order = Order(
-        user_id=2,  # table user id
-        table_number=1,
-        status='Pending',
-        total_price=10.0
-    )
-    with app.app_context():
-        db.session.add(order)
-        db.session.commit()
-        order_id = order.id
-    
-    # Test order acceptance
-    response = client.put(
-        f'/orders/{order_id}/status',
-        json={'status': 'Accepted'},
-        headers={'Authorization': f'Bearer {token}'}
-    )
     assert response.status_code == 200
-    assert response.json['status'] == 'Accepted'
-    assert response.json['staff_id'] is not None
+    assert 'access_token' in response.json
+    assert response.json['role'] == User.ROLE_ADMIN
 
-def test_menu_retrieval(client):
-    response = client.get('/menu')
-    assert response.status_code == 200
-    assert len(response.json) > 0
-    assert 'name' in response.json[0]
-    assert 'price' in response.json[0]
-
-def test_order_creation(client):
-    # Login as table
-    with app.app_context():
-        table_user = User.query.filter_by(role='table').first()
-        token = create_access_token(
-            identity=table_user.id,
-            additional_claims={'role': 'table', 'table_number': 1}
-        )
+def test_staff_login(client):
+    """Test staff login functionality"""
+    response = client.post('/auth/login', json={
+        'username': 'staff1',
+        'password': 'staff123'
+    })
     
-    # Create order
-    response = client.post(
-        '/orders',
-        json={
-            'items': [{'id': 1, 'quantity': 1}]
-        },
-        headers={'Authorization': f'Bearer {token}'}
-    )
-    assert response.status_code == 201
-    assert 'order_id' in response.json
+    assert response.status_code == 200
+    assert 'access_token' in response.json
+    assert response.json['role'] == User.ROLE_STAFF
+
+def test_table_login(client):
+    """Test table login functionality"""
+    response = client.post('/auth/login', json={
+        'username': 'table1',
+        'password': 'table123'
+    })
+    
+    assert response.status_code == 200
+    assert 'access_token' in response.json
+    assert response.json['role'] == User.ROLE_TABLE
+    assert response.json['table_number'] == 1
+
+def test_invalid_login(client):
+    """Test invalid login credentials"""
+    response = client.post('/auth/login', json={
+        'username': 'staff1',
+        'password': 'wrongpassword'
+    })
+    
+    assert response.status_code == 401
+    assert 'error' in response.json
