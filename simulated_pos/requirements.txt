@@ -1,4 +1,7 @@
 Flask
 flask-sqlalchemy
 flask-jwt-extended
-bcrypt
+flask-cors
+pytest
+pytest-flask
+flask-testing
