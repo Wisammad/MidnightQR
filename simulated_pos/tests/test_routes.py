@@ -1,19 +1,139 @@
 import pytest
 from app import app, db
-from models import User
+from models import User, MenuItem, Order, Payment
 from flask_jwt_extended import create_access_token
 
 @pytest.fixture
-def application():
+def client():
     app.config['TESTING'] = True
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     app.config['JWT_SECRET_KEY'] = 'test-key'
     
-    # Register the auth blueprint
-    from auth import auth
-    app.register_blueprint(auth, url_prefix='/auth')
+    with app.test_client() as client:
+        with app.app_context():
+            db.create_all()
+            # Create test users
+            admin = User(username='admin', role='admin')
+            admin.set_password('admin123')
+            staff = User(username='staff1', role='staff')
+            staff.set_password('staff123')
+            table = User(username='table1', role='table', table_number=1)
+            table.set_password('table123')
+            
+            # Create test menu items
+            mojito = MenuItem(
+                name='Mojito',
+                price=8.50,
+                category='drink',
+                stock=100,
+                track_stock=True
+            )
+            waiter_service = MenuItem(
+                name='Waiter Service',
+                price=0.00,
+                category='service',
+                track_stock=False
+            )
+            
+            db.session.add_all([admin, staff, table, mojito, waiter_service])
+            db.session.commit()
+            
+        yield client
+        
+        with app.app_context():
+            db.drop_all()
+
+def test_create_order(client):
+    """Test order creation by table"""
+    # Login as table
+    response = client.post('/auth/login', json={
+        'username': 'table1',
+        'password': 'table123'
+    })
+    token = response.json['access_token']
     
-    return app
+    # Create order
+    response = client.post('/orders', 
+        json={
+            'items': [{'id': 1, 'quantity': 2}]
+        },
+        headers={'Authorization': f'Bearer {token}'}
+    )
+    
+    assert response.status_code == 201
+    assert response.json['message'] == "Order created successfully"
+    assert response.json['order_id'] is not None
+
+def test_update_order_status(client):
+    """Test order status updates by staff"""
+    # Create initial order as table
+    table_token = create_access_token(identity={'id': 3, 'role': 'table'})
+    response = client.post('/orders',
+        json={'items': [{'id': 1, 'quantity': 1}]},
+        headers={'Authorization': f'Bearer {table_token}'}
+    )
+    order_id = response.json['order_id']
+    
+    # Login as staff
+    staff_token = create_access_token(identity={'id': 2, 'role': 'staff'})
+    
+    # Update to Preparing
+    response = client.put(f'/orders/{order_id}/status',
+        json={'status': 'Preparing'},
+        headers={'Authorization': f'Bearer {staff_token}'}
+    )
+    assert response.status_code == 200
+    assert response.json['status'] == 'Preparing'
+    
+    # Update to Completed
+    response = client.put(f'/orders/{order_id}/status',
+        json={'status': 'Completed'},
+        headers={'Authorization': f'Bearer {staff_token}'}
+    )
+    assert response.status_code == 200
+    assert response.json['status'] == 'Completed'
+
+def test_process_payment(client):
+    """Test payment processing for an order"""
+    # Create order as table
+    table_token = create_access_token(identity={'id': 3, 'role': 'table'})
+    response = client.post('/orders',
+        json={'items': [{'id': 1, 'quantity': 1}]},
+        headers={'Authorization': f'Bearer {table_token}'}
+    )
+    order_id = response.json['order_id']
+    
+    # Process payment
+    response = client.post('/payments',
+        json={'order_id': order_id, 'amount': 8.50},
+        headers={'Authorization': f'Bearer {table_token}'}
+    )
+    assert response.status_code == 200
+    assert response.json['status'] == 'Success'
+
+def test_process_refund(client):
+    """Test refund processing for a paid order"""
+    # Create and pay for an order
+    table_token = create_access_token(identity={'id': 3, 'role': 'table'})
+    response = client.post('/orders',
+        json={'items': [{'id': 1, 'quantity': 1}]},
+        headers={'Authorization': f'Bearer {table_token}'}
+    )
+    order_id = response.json['order_id']
+    
+    client.post('/payments',
+        json={'order_id': order_id, 'amount': 8.50},
+        headers={'Authorization': f'Bearer {table_token}'}
+    )
+    
+    # Process refund as admin
+    admin_token = create_access_token(identity={'id': 1, 'role': 'admin'})
+    response = client.post('/refunds',
+        json={'order_id': order_id},
+        headers={'Authorization': f'Bearer {admin_token}'}
+    )
+    assert response.status_code == 200
+    assert response.json['status'] == 'Refunded'
 
 @pytest.fixture
 def client(application):
