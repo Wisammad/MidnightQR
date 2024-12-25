@@ -45,7 +45,7 @@ def client():
 
 def test_create_order(client):
     """Test order creation by table"""
-    # Login as table
+    # Assume 'table1' user already exists
     response = client.post('/auth/login', json={
         'username': 'table1',
         'password': 'table123'
@@ -165,6 +165,7 @@ def admin_token(client, application):
 
 def test_staff_login(client):
     """Test staff login functionality"""
+    # Assume 'staff1' user already exists
     response = client.post('/auth/login', json={
         'username': 'staff1',
         'password': 'staff123'
