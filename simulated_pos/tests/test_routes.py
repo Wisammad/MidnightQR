@@ -4,44 +4,20 @@ from models import User, MenuItem, Order, Payment
 from flask_jwt_extended import create_access_token
 
 @pytest.fixture
-def client():
+def application():
     app.config['TESTING'] = True
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     app.config['JWT_SECRET_KEY'] = 'test-key'
     
-    with app.test_client() as client:
-        with app.app_context():
-            db.create_all()
-            # Create test users
-            admin = User(username='admin', role='admin')
-            admin.set_password('admin123')
-            staff = User(username='staff1', role='staff')
-            staff.set_password('staff123')
-            table = User(username='table1', role='table', table_number=1)
-            table.set_password('table123')
-            
-            # Create test menu items
-            mojito = MenuItem(
-                name='Mojito',
-                price=8.50,
-                category='drink',
-                stock=100,
-                track_stock=True
-            )
-            waiter_service = MenuItem(
-                name='Waiter Service',
-                price=0.00,
-                category='service',
-                track_stock=False
-            )
-            
-            db.session.add_all([admin, staff, table, mojito, waiter_service])
-            db.session.commit()
-            
-        yield client
-        
-        with app.app_context():
-            db.drop_all()
+    with app.app_context():
+        db.create_all()
+        # Assume that the database is pre-populated with users
+        yield app
+        db.drop_all()
+
+@pytest.fixture
+def client(application):
+    return application.test_client()
 
 def test_create_order(client):
     """Test order creation by table"""
@@ -132,20 +108,6 @@ def test_process_refund(client):
     )
     assert response.status_code == 200
     assert response.json['status'] == 'Refunded'
-
-@pytest.fixture
-def client(application):
-    with application.test_client() as client:
-        with application.app_context():
-            db.create_all()
-            # Create test staff user only
-            staff_user = User(username='staff1', role='staff')
-            staff_user.set_password('staff123')
-            db.session.add(staff_user)
-            db.session.commit()
-        yield client
-        with application.app_context():
-            db.drop_all()
 
 @pytest.fixture
 def admin_token(client, application):
